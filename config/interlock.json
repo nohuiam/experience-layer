@@ -1,0 +1,52 @@
+{
+  "server": {
+    "name": "experience-layer",
+    "id": "experience-layer-001",
+    "version": "1.0.0"
+  },
+  "ports": {
+    "udp": 3031,
+    "http": 8031,
+    "websocket": 9031
+  },
+  "signals": {
+    "listen": [
+      { "code": "0xB0", "name": "BUILD_COMPLETED", "from": ["neurogenesis"] },
+      { "code": "0xD0", "name": "VERIFICATION_RESULT", "from": ["verifier"] },
+      { "code": "0xC0", "name": "VALIDATION_APPROVED", "from": ["context-guardian"] },
+      { "code": "0xC1", "name": "VALIDATION_REJECTED", "from": ["context-guardian"] },
+      { "code": "0xFF", "name": "OPERATION_COMPLETE", "from": ["*"] },
+      { "code": "0xE5", "name": "LESSON_LEARNED", "from": ["consciousness"] },
+      { "code": "0xD1", "name": "CLAIM_VERIFIED", "from": ["verifier"] },
+      { "code": "0xD2", "name": "CLAIM_REFUTED", "from": ["verifier"] },
+      { "code": "0x00", "name": "HEARTBEAT", "from": ["*"] }
+    ],
+    "emit": [
+      { "code": "0xF0", "name": "EXPERIENCE_RECORDED", "to": ["consciousness"] },
+      { "code": "0xF1", "name": "PATTERN_EMERGED", "to": ["consciousness", "trinity"] },
+      { "code": "0xF2", "name": "LESSON_EXTRACTED", "to": ["*"] },
+      { "code": "0xF3", "name": "LESSON_VALIDATED", "to": ["consciousness"] }
+    ]
+  },
+  "peers": [
+    { "name": "consciousness", "port": 3028 },
+    { "name": "verifier", "port": 3021 },
+    { "name": "context-guardian", "port": 3001 },
+    { "name": "neurogenesis", "port": 3010 },
+    { "name": "trinity", "port": 3012 }
+  ],
+  "tumbler": {
+    "mode": "whitelist",
+    "whitelist": [
+      "BUILD_COMPLETED",
+      "VERIFICATION_RESULT",
+      "VALIDATION_APPROVED",
+      "VALIDATION_REJECTED",
+      "OPERATION_COMPLETE",
+      "LESSON_LEARNED",
+      "CLAIM_VERIFIED",
+      "CLAIM_REFUTED",
+      "HEARTBEAT"
+    ]
+  }
+}
