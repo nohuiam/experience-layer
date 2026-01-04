@@ -282,11 +282,13 @@ export function calculateDiscriminationWeight(
 // =============================================================================
 
 export interface Signal {
-  code: number;
-  name: string;
-  sender: string;
+  signalType: number;
+  version: number;
   timestamp: number;
-  data?: Record<string, unknown>;
+  payload: {
+    sender: string;
+    [key: string]: unknown;
+  };
 }
 
 export const SignalTypes = {

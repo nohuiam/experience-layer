@@ -4,6 +4,7 @@
  */
 
 import { Signal } from '../types.js';
+import { getSignalName } from './protocol.js';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -39,10 +40,11 @@ export function loadTumblerConfig(): TumblerConfig {
  * Check if a signal is allowed through the tumbler
  */
 export function isSignalAllowed(signal: Signal): boolean {
+  const signalName = getSignalName(signal.signalType);
   if (config.mode === 'whitelist') {
-    return config.whitelist?.includes(signal.name) ?? false;
+    return config.whitelist?.includes(signalName) ?? false;
   } else if (config.mode === 'blacklist') {
-    return !(config.blacklist?.includes(signal.name) ?? false);
+    return !(config.blacklist?.includes(signalName) ?? false);
   }
   return true;
 }

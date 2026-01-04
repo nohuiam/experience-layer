@@ -17,11 +17,13 @@ export {
 } from './socket.js';
 
 export {
+  encode,
+  decode,
   encodeSignal,
   decodeSignal,
   createSignal,
   getSignalName,
-  getSignalCode
+  isValidSignal
 } from './protocol.js';
 
 export {

@@ -8,7 +8,7 @@ import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { Signal, SignalTypes } from '../types.js';
-import { encodeSignal, decodeSignal, createSignal } from './protocol.js';
+import { encodeSignal, decodeSignal, createSignal, getSignalName } from './protocol.js';
 import { handleSignal } from './handlers.js';
 import { isSignalAllowed } from './tumbler.js';
 
@@ -60,20 +60,19 @@ export function startInterlock(port?: number): dgram.Socket {
   socket = dgram.createSocket('udp4');
 
   socket.on('message', (msg: Buffer, rinfo: dgram.RemoteInfo) => {
-    try {
-      const signal = decodeSignal(msg);
+    const signal = decodeSignal(msg);
 
-      // Filter through tumbler
-      if (!isSignalAllowed(signal)) {
-        console.log(`Signal ${signal.name} blocked by tumbler`);
-        return;
-      }
-
-      console.log(`Received ${signal.name} from ${rinfo.address}:${rinfo.port}`);
-      handleSignal(signal);
-    } catch (error) {
-      console.error('Error processing InterLock message:', error);
+    // Silently ignore invalid/incompatible signals
+    if (!signal) {
+      return;
     }
+
+    // Filter through tumbler
+    if (!isSignalAllowed(signal)) {
+      return;
+    }
+
+    handleSignal(signal);
   });
 
   socket.on('error', (error) => {
@@ -111,8 +110,6 @@ export function sendToPeer(peerName: string, signal: Signal): void {
   socket.send(buffer, peer.port, 'localhost', (error) => {
     if (error) {
       console.error(`Failed to send to ${peerName}:`, error);
-    } else {
-      console.log(`Sent ${signal.name} to ${peerName}:${peer.port}`);
     }
   });
 }

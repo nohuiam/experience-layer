@@ -6,6 +6,7 @@
 import { Signal, SignalTypes } from '../types.js';
 import { getDatabase } from '../database/schema.js';
 import { recordExperience } from '../tools/record-experience.js';
+import { getSignalName } from './protocol.js';
 import {
   broadcastExperienceRecorded,
   broadcastLessonValidated
@@ -16,25 +17,26 @@ type SignalHandler = (signal: Signal) => void;
 const handlers: Map<number, SignalHandler> = new Map();
 
 /**
- * Register a handler for a signal code
+ * Register a handler for a signal type
  */
-export function registerHandler(code: number, handler: SignalHandler): void {
-  handlers.set(code, handler);
+export function registerHandler(signalType: number, handler: SignalHandler): void {
+  handlers.set(signalType, handler);
 }
 
 /**
  * Handle an incoming signal
  */
 export function handleSignal(signal: Signal): void {
-  const handler = handlers.get(signal.code);
+  const handler = handlers.get(signal.signalType);
+  const signalName = getSignalName(signal.signalType);
   if (handler) {
     try {
       handler(signal);
     } catch (error) {
-      console.error(`Error handling signal ${signal.name}:`, error);
+      console.error(`Error handling signal ${signalName}:`, error);
     }
   } else {
-    console.log(`No handler for signal: ${signal.name} (0x${signal.code.toString(16)})`);
+    console.log(`No handler for signal: ${signalName} (0x${signal.signalType.toString(16)})`);
   }
 }
 
@@ -46,12 +48,12 @@ export function handleSignal(signal: Signal): void {
  * Handle BUILD_COMPLETED signal from Neurogenesis
  */
 registerHandler(SignalTypes.BUILD_COMPLETED, (signal) => {
-  console.log(`Received BUILD_COMPLETED from ${signal.sender}`);
+  const { sender, ...data } = signal.payload;
+  console.log(`Received BUILD_COMPLETED from ${sender}`);
 
-  const data = signal.data || {};
   const result = recordExperience({
     operation_type: 'build',
-    server_name: signal.sender,
+    server_name: sender,
     problem: { context: data.context as Record<string, unknown> },
     solution: { approach: data.approach as string },
     outcome: (data.success as boolean) ? 'success' : 'failure',
@@ -68,12 +70,12 @@ registerHandler(SignalTypes.BUILD_COMPLETED, (signal) => {
  * Handle VERIFICATION_RESULT signal from Verifier
  */
 registerHandler(SignalTypes.VERIFICATION_RESULT, (signal) => {
-  console.log(`Received VERIFICATION_RESULT from ${signal.sender}`);
+  const { sender, ...data } = signal.payload;
+  console.log(`Received VERIFICATION_RESULT from ${sender}`);
 
-  const data = signal.data || {};
   const result = recordExperience({
     operation_type: 'verification',
-    server_name: signal.sender,
+    server_name: sender,
     problem: { query: data.claim as string },
     solution: { tool: 'verifier', approach: data.method as string },
     outcome: (data.verified as boolean) ? 'success' : 'failure',
@@ -89,12 +91,12 @@ registerHandler(SignalTypes.VERIFICATION_RESULT, (signal) => {
  * Handle VALIDATION_APPROVED signal from Context Guardian
  */
 registerHandler(SignalTypes.VALIDATION_APPROVED, (signal) => {
-  console.log(`Received VALIDATION_APPROVED from ${signal.sender}`);
+  const { sender, ...data } = signal.payload;
+  console.log(`Received VALIDATION_APPROVED from ${sender}`);
 
-  const data = signal.data || {};
   recordExperience({
     operation_type: 'validation',
-    server_name: signal.sender,
+    server_name: sender,
     problem: { context: data.context as Record<string, unknown> },
     solution: { approach: 'context-guardian-validation' },
     outcome: 'success',
@@ -107,12 +109,12 @@ registerHandler(SignalTypes.VALIDATION_APPROVED, (signal) => {
  * Handle VALIDATION_REJECTED signal from Context Guardian
  */
 registerHandler(SignalTypes.VALIDATION_REJECTED, (signal) => {
-  console.log(`Received VALIDATION_REJECTED from ${signal.sender}`);
+  const { sender, ...data } = signal.payload;
+  console.log(`Received VALIDATION_REJECTED from ${sender}`);
 
-  const data = signal.data || {};
   recordExperience({
     operation_type: 'validation',
-    server_name: signal.sender,
+    server_name: sender,
     problem: { context: data.context as Record<string, unknown> },
     solution: { approach: 'context-guardian-validation' },
     outcome: 'failure',
@@ -125,12 +127,12 @@ registerHandler(SignalTypes.VALIDATION_REJECTED, (signal) => {
  * Handle OPERATION_COMPLETE signal from any server
  */
 registerHandler(SignalTypes.OPERATION_COMPLETE, (signal) => {
-  console.log(`Received OPERATION_COMPLETE from ${signal.sender}`);
+  const { sender, ...data } = signal.payload;
+  console.log(`Received OPERATION_COMPLETE from ${sender}`);
 
-  const data = signal.data || {};
   recordExperience({
     operation_type: (data.operation_type as string) || 'unknown',
-    server_name: signal.sender,
+    server_name: sender,
     problem: data.problem as { query?: string; constraints?: Record<string, unknown> },
     solution: data.solution as { tool?: string; params?: Record<string, unknown> },
     outcome: (data.outcome as 'success' | 'failure' | 'partial') || 'partial',
@@ -145,9 +147,9 @@ registerHandler(SignalTypes.OPERATION_COMPLETE, (signal) => {
  * Handle LESSON_LEARNED signal from Consciousness
  */
 registerHandler(SignalTypes.LESSON_LEARNED, (signal) => {
-  console.log(`Received LESSON_LEARNED from ${signal.sender}`);
+  const { sender, ...data } = signal.payload;
+  console.log(`Received LESSON_LEARNED from ${sender}`);
 
-  const data = signal.data || {};
   const db = getDatabase();
 
   // Store the lesson directly
@@ -170,9 +172,9 @@ registerHandler(SignalTypes.LESSON_LEARNED, (signal) => {
  * Handle CLAIM_VERIFIED signal from Verifier
  */
 registerHandler(SignalTypes.CLAIM_VERIFIED, (signal) => {
-  console.log(`Received CLAIM_VERIFIED from ${signal.sender}`);
+  const { sender, ...data } = signal.payload;
+  console.log(`Received CLAIM_VERIFIED from ${sender}`);
 
-  const data = signal.data || {};
   const lessonId = data.lesson_id as number;
 
   if (lessonId) {
@@ -197,9 +199,9 @@ registerHandler(SignalTypes.CLAIM_VERIFIED, (signal) => {
  * Handle CLAIM_REFUTED signal from Verifier
  */
 registerHandler(SignalTypes.CLAIM_REFUTED, (signal) => {
-  console.log(`Received CLAIM_REFUTED from ${signal.sender}`);
+  const { sender, ...data } = signal.payload;
+  console.log(`Received CLAIM_REFUTED from ${sender}`);
 
-  const data = signal.data || {};
   const lessonId = data.lesson_id as number;
 
   if (lessonId) {
@@ -225,7 +227,8 @@ registerHandler(SignalTypes.CLAIM_REFUTED, (signal) => {
  */
 registerHandler(SignalTypes.HEARTBEAT, (signal) => {
   // Just log heartbeats, no action needed
-  console.log(`Heartbeat from ${signal.sender}`);
+  const { sender } = signal.payload;
+  console.log(`Heartbeat from ${sender}`);
 });
 
 export { handlers };
