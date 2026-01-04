@@ -31,6 +31,7 @@
   "peers": [
     { "name": "consciousness", "port": 3028 },
     { "name": "verifier", "port": 3021 },
+    { "name": "tenets-server", "port": 3027 },
     { "name": "context-guardian", "port": 3001 },
     { "name": "neurogenesis", "port": 3010 },
     { "name": "trinity", "port": 3012 }
