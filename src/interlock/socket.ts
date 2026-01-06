@@ -27,7 +27,9 @@ interface InterlockConfig {
 
 let socket: dgram.Socket | null = null;
 let config: InterlockConfig | null = null;
+let heartbeatTimer: NodeJS.Timeout | null = null;
 const SERVER_NAME = 'experience-layer';
+const HEARTBEAT_INTERVAL = 30000; // 30 seconds
 
 /**
  * Load InterLock configuration
@@ -82,11 +84,36 @@ export function startInterlock(port?: number): dgram.Socket {
   socket.on('listening', () => {
     const address = socket!.address();
     console.log(`InterLock mesh listening on ${address.address}:${address.port}`);
+    startHeartbeat();
   });
 
   socket.bind(udpPort);
 
   return socket;
+}
+
+/**
+ * Start heartbeat broadcasting
+ */
+function startHeartbeat(): void {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+  }
+
+  heartbeatTimer = setInterval(() => {
+    const signal = createSignal(SignalTypes.HEARTBEAT, SERVER_NAME, {
+      status: 'alive',
+      uptime: process.uptime()
+    });
+    broadcastSignal(signal);
+  }, HEARTBEAT_INTERVAL);
+
+  // Send initial heartbeat immediately
+  const signal = createSignal(SignalTypes.HEARTBEAT, SERVER_NAME, {
+    status: 'alive',
+    uptime: process.uptime()
+  });
+  broadcastSignal(signal);
 }
 
 /**
@@ -182,6 +209,10 @@ export function getSocket(): dgram.Socket | null {
  * Close the InterLock socket
  */
 export function closeInterlock(): void {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
   if (socket) {
     socket.close();
     socket = null;

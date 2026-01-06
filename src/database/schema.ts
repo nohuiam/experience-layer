@@ -47,6 +47,22 @@ export class DatabaseManager {
   }
 
   /**
+   * Run a migration if it hasn't been applied yet
+   * SQLite doesn't support IF NOT EXISTS for ALTER TABLE, so we catch the error
+   */
+  private runMigration(name: string, sql: string): void {
+    try {
+      this.db.exec(sql);
+    } catch (err: unknown) {
+      // Column already exists - this is expected for migrations
+      const message = err instanceof Error ? err.message : String(err);
+      if (!message.includes('duplicate column name')) {
+        console.warn(`Migration ${name} warning:`, message);
+      }
+    }
+  }
+
+  /**
    * Initialize database schema with research-enhanced tables
    */
   private initializeSchema(): void {
@@ -83,6 +99,28 @@ export class DatabaseManager {
       CREATE INDEX IF NOT EXISTS idx_episodes_outcome ON episodes(outcome);
       CREATE INDEX IF NOT EXISTS idx_episodes_server ON episodes(server_name);
       CREATE INDEX IF NOT EXISTS idx_episodes_utility ON episodes(utility_score);
+    `);
+
+    // Migration: Add client metadata fields (Jan 2026)
+    // These fields enable domain-specific queries for business intake
+    this.runMigration('add_client_domain', `
+      ALTER TABLE episodes ADD COLUMN client_domain TEXT
+    `);
+    this.runMigration('add_problem_category', `
+      ALTER TABLE episodes ADD COLUMN problem_category TEXT
+    `);
+    this.runMigration('add_vertical', `
+      ALTER TABLE episodes ADD COLUMN vertical TEXT
+    `);
+    this.runMigration('add_company_size', `
+      ALTER TABLE episodes ADD COLUMN company_size TEXT
+    `);
+
+    // Indexes for domain-specific queries
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_episodes_domain ON episodes(client_domain);
+      CREATE INDEX IF NOT EXISTS idx_episodes_category ON episodes(problem_category);
+      CREATE INDEX IF NOT EXISTS idx_episodes_vertical ON episodes(vertical);
     `);
 
     // Patterns table - Enhanced with discrimination weight
@@ -162,11 +200,13 @@ export class DatabaseManager {
         timestamp, operation_type, server_name,
         problem, solution, outcome, metadata,
         quality_score, duration_ms, notes,
-        novelty_score, effectiveness_score, generalizability_score, utility_score
+        novelty_score, effectiveness_score, generalizability_score, utility_score,
+        client_domain, problem_category, vertical, company_size
       ) VALUES (
         ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?,
+        ?, ?, ?, ?,
         ?, ?, ?, ?
       )
     `);
@@ -185,7 +225,11 @@ export class DatabaseManager {
       episode.novelty_score,
       episode.effectiveness_score,
       episode.generalizability_score,
-      episode.utility_score
+      episode.utility_score,
+      episode.client_domain ?? null,
+      episode.problem_category ?? null,
+      episode.vertical ?? null,
+      episode.company_size ?? null
     );
 
     return result.lastInsertRowid as number;
@@ -606,7 +650,11 @@ export class DatabaseManager {
       novelty_score: row.novelty_score,
       effectiveness_score: row.effectiveness_score,
       generalizability_score: row.generalizability_score,
-      utility_score: row.utility_score
+      utility_score: row.utility_score,
+      client_domain: row.client_domain ?? undefined,
+      problem_category: row.problem_category ?? undefined,
+      vertical: row.vertical ?? undefined,
+      company_size: row.company_size ?? undefined
     };
   }
 

@@ -55,6 +55,12 @@ export interface Episode {
   effectiveness_score: number;
   generalizability_score: number;
   utility_score: number;
+
+  // Client metadata (for business intake domain-specific queries)
+  client_domain?: string;      // e.g., "e-commerce", "healthcare", "fintech"
+  problem_category?: string;   // e.g., "data_migration", "api_integration"
+  vertical?: string;           // e.g., "B2B SaaS", "Enterprise", "SMB"
+  company_size?: string;       // e.g., "startup", "mid-market", "enterprise"
 }
 
 export interface ProblemContext {
@@ -138,6 +144,11 @@ export interface RecordExperienceInput {
   quality_score?: number;
   duration_ms?: number;
   notes?: string;
+  // Client metadata (for business intake)
+  client_domain?: string;
+  problem_category?: string;
+  vertical?: string;
+  company_size?: string;
 }
 
 export interface RecallByTypeInput {
@@ -330,6 +341,11 @@ export interface EpisodeRow {
   effectiveness_score: number;
   generalizability_score: number;
   utility_score: number;
+  // Client metadata fields
+  client_domain: string | null;
+  problem_category: string | null;
+  vertical: string | null;
+  company_size: string | null;
 }
 
 export interface PatternRow {
