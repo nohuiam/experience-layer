@@ -719,6 +719,50 @@ export class DatabaseManager {
   }
 
   /**
+   * Clean up old data to prevent unbounded growth
+   * @param retentionDays - Number of days to retain data (default 90)
+   * @returns Summary of deleted records
+   */
+  cleanupOldData(retentionDays: number = 90): {
+    deletedEpisodes: number;
+    deletedPatterns: number;
+    deprecatedLessons: number;
+  } {
+    const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+
+    // Delete old episodes
+    const episodeResult = this.db.prepare(`
+      DELETE FROM episodes WHERE timestamp < ?
+    `).run(cutoff);
+
+    // Delete patterns not seen recently (double the retention period for patterns)
+    const patternCutoff = Date.now() - retentionDays * 2 * 24 * 60 * 60 * 1000;
+    const patternResult = this.db.prepare(`
+      DELETE FROM patterns WHERE last_seen < ?
+    `).run(patternCutoff);
+
+    // Deprecate lessons with very low confidence (haven't been validated recently)
+    const lessonCutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+    const lessonResult = this.db.prepare(`
+      UPDATE lessons
+      SET deprecated_at = ?
+      WHERE deprecated_at IS NULL
+        AND last_validated < ?
+        AND initial_confidence < 0.3
+    `).run(Date.now(), lessonCutoff);
+
+    const summary = {
+      deletedEpisodes: episodeResult.changes,
+      deletedPatterns: patternResult.changes,
+      deprecatedLessons: lessonResult.changes
+    };
+
+    console.error(`[ExperienceLayer] Cleanup: ${summary.deletedEpisodes} episodes, ${summary.deletedPatterns} patterns, ${summary.deprecatedLessons} lessons`);
+
+    return summary;
+  }
+
+  /**
    * Close database connection
    */
   close(): void {
