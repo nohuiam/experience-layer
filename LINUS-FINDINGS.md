@@ -48,17 +48,20 @@ cleanupOldData(retentionDays: number = 90): {
 
 ## Pre-Existing Issues
 
-### InterLock Test Compilation Errors
+### InterLock Test Compilation Errors (FIXED)
 - **Location:** `tests/interlock.test.ts`
-- **Issue:** Uses old Signal format, not BaNano format
-- **Status:** Not in scope for this audit
-- **Impact:** 65/65 core tests pass, interlock suite skipped
+- **Issue:** Tests used old Signal format (`code`, `name`, `sender`, `data`) instead of BaNano format (`signalType`, `version`, `timestamp`, `payload`)
+- **Fix:** Rewrote all 32 interlock tests to use proper BaNano Signal format:
+  - Updated Signal creation to use `signalType`, `version`, `timestamp`, `payload`
+  - Changed property access from `signal.sender` to `signal.payload.sender`
+  - Updated timestamp expectations from milliseconds to Unix seconds
+  - Added `getSignalCode()` function to protocol.ts (reverse of `getSignalName()`)
 
 ## Test Results
 
 ```
-Test Suites: 3 passed, 1 failed (interlock.test.ts - pre-existing)
-Tests:       65 passed, 65 total
+Test Suites: 4 passed, 4 total
+Tests:       96 passed, 96 total
 ```
 
 ## Files Modified

@@ -1,6 +1,12 @@
 /**
  * InterLock Tests for Experience Layer
  * Tests protocol encoding/decoding, tumbler filtering, and signal handling
+ *
+ * Uses BaNano 12-byte binary format:
+ * - signalType: uint16 (signal type code)
+ * - version: uint16 (protocol version)
+ * - timestamp: uint32 (Unix seconds)
+ * - payload: { sender: string, ...data }
  */
 
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
@@ -9,7 +15,9 @@ import {
   decodeSignal,
   createSignal,
   getSignalName,
-  getSignalCode
+  getSignalCode,
+  encode,
+  decode
 } from '../src/interlock/protocol.js';
 import {
   isSignalAllowed,
@@ -30,29 +38,32 @@ describe('InterLock Protocol', () => {
   describe('Signal Encoding/Decoding', () => {
     it('should encode and decode a basic signal', () => {
       const signal: Signal = {
-        code: 0xB0,
-        name: 'BUILD_COMPLETED',
-        sender: 'neurogenesis',
-        timestamp: Date.now()
+        signalType: SignalTypes.BUILD_COMPLETED,
+        version: 0x0100,
+        timestamp: Math.floor(Date.now() / 1000),
+        payload: {
+          sender: 'neurogenesis'
+        }
       };
 
       const encoded = encodeSignal(signal);
       expect(encoded).toBeInstanceOf(Buffer);
 
       const decoded = decodeSignal(encoded);
-      expect(decoded.code).toBe(signal.code);
-      expect(decoded.name).toBe(signal.name);
-      expect(decoded.sender).toBe(signal.sender);
-      expect(decoded.timestamp).toBe(signal.timestamp);
+      expect(decoded).not.toBeNull();
+      expect(decoded!.signalType).toBe(signal.signalType);
+      expect(decoded!.version).toBe(signal.version);
+      expect(decoded!.payload.sender).toBe('neurogenesis');
+      expect(decoded!.timestamp).toBe(signal.timestamp);
     });
 
     it('should encode and decode signal with data payload', () => {
       const signal: Signal = {
-        code: 0xD0,
-        name: 'VERIFICATION_RESULT',
-        sender: 'verifier',
-        timestamp: Date.now(),
-        data: {
+        signalType: SignalTypes.VERIFICATION_RESULT,
+        version: 0x0100,
+        timestamp: Math.floor(Date.now() / 1000),
+        payload: {
+          sender: 'verifier',
           claim: 'Test claim',
           verified: true,
           confidence: 0.95
@@ -62,44 +73,55 @@ describe('InterLock Protocol', () => {
       const encoded = encodeSignal(signal);
       const decoded = decodeSignal(encoded);
 
-      expect(decoded.data).toEqual(signal.data);
+      expect(decoded).not.toBeNull();
+      expect(decoded!.payload.claim).toBe('Test claim');
+      expect(decoded!.payload.verified).toBe(true);
+      expect(decoded!.payload.confidence).toBe(0.95);
     });
 
     it('should handle empty sender', () => {
       const signal: Signal = {
-        code: 0x00,
-        name: 'HEARTBEAT',
-        sender: '',
-        timestamp: Date.now()
+        signalType: SignalTypes.HEARTBEAT,
+        version: 0x0100,
+        timestamp: Math.floor(Date.now() / 1000),
+        payload: {
+          sender: ''
+        }
       };
 
       const encoded = encodeSignal(signal);
       const decoded = decodeSignal(encoded);
 
-      expect(decoded.sender).toBe('');
+      expect(decoded).not.toBeNull();
+      // Protocol normalizes empty sender to 'unknown' for safety
+      expect(decoded!.payload.sender).toBe('unknown');
     });
 
     it('should handle long sender name', () => {
+      const longSender = 'a'.repeat(200);
       const signal: Signal = {
-        code: 0xFF,
-        name: 'OPERATION_COMPLETE',
-        sender: 'a'.repeat(200),
-        timestamp: Date.now()
+        signalType: SignalTypes.OPERATION_COMPLETE,
+        version: 0x0100,
+        timestamp: Math.floor(Date.now() / 1000),
+        payload: {
+          sender: longSender
+        }
       };
 
       const encoded = encodeSignal(signal);
       const decoded = decodeSignal(encoded);
 
-      expect(decoded.sender).toBe('a'.repeat(200));
+      expect(decoded).not.toBeNull();
+      expect(decoded!.payload.sender).toBe(longSender);
     });
 
     it('should handle complex nested data', () => {
       const signal: Signal = {
-        code: 0xF0,
-        name: 'EXPERIENCE_RECORDED',
-        sender: 'experience-layer',
-        timestamp: Date.now(),
-        data: {
+        signalType: SignalTypes.EXPERIENCE_RECORDED,
+        version: 0x0100,
+        timestamp: Math.floor(Date.now() / 1000),
+        payload: {
+          sender: 'experience-layer',
           episode: {
             id: 123,
             problem: { query: 'test', constraints: { nested: true } }
@@ -112,16 +134,35 @@ describe('InterLock Protocol', () => {
       const encoded = encodeSignal(signal);
       const decoded = decodeSignal(encoded);
 
-      expect(decoded.data).toEqual(signal.data);
+      expect(decoded).not.toBeNull();
+      expect(decoded!.payload.episode).toEqual(signal.payload.episode);
+      expect(decoded!.payload.patterns).toEqual([1, 2, 3]);
+      expect(decoded!.payload.meta).toBeNull();
+    });
+
+    it('should return null for invalid buffer', () => {
+      expect(decode(Buffer.from([]))).toBeNull();
+      expect(decode(Buffer.from([1, 2, 3]))).toBeNull();
+    });
+
+    it('should return null for buffer too short for payload', () => {
+      // Create a header claiming 1000 bytes of payload but only provide 12 byte header
+      const header = Buffer.alloc(12);
+      header.writeUInt16BE(0xB0, 0);  // signalType
+      header.writeUInt16BE(0x0100, 2); // version
+      header.writeUInt32BE(1000, 4);   // payloadLength (too long)
+      header.writeUInt32BE(Math.floor(Date.now() / 1000), 8); // timestamp
+
+      expect(decode(header)).toBeNull();
     });
   });
 
   describe('Signal Names and Codes', () => {
     it('should get signal name from code', () => {
-      expect(getSignalName(0xB0)).toBe('BUILD_COMPLETED');
-      expect(getSignalName(0xD0)).toBe('VERIFICATION_RESULT');
-      expect(getSignalName(0xF0)).toBe('EXPERIENCE_RECORDED');
-      expect(getSignalName(0x00)).toBe('HEARTBEAT');
+      expect(getSignalName(SignalTypes.BUILD_COMPLETED)).toBe('BUILD_COMPLETED');
+      expect(getSignalName(SignalTypes.VERIFICATION_RESULT)).toBe('VERIFICATION_RESULT');
+      expect(getSignalName(SignalTypes.EXPERIENCE_RECORDED)).toBe('EXPERIENCE_RECORDED');
+      expect(getSignalName(SignalTypes.HEARTBEAT)).toBe('HEARTBEAT');
     });
 
     it('should return UNKNOWN for invalid codes', () => {
@@ -129,27 +170,46 @@ describe('InterLock Protocol', () => {
     });
 
     it('should get signal code from name', () => {
-      expect(getSignalCode('BUILD_COMPLETED')).toBe(0xB0);
-      expect(getSignalCode('HEARTBEAT')).toBe(0x00);
+      expect(getSignalCode('BUILD_COMPLETED')).toBe(SignalTypes.BUILD_COMPLETED);
+      expect(getSignalCode('HEARTBEAT')).toBe(SignalTypes.HEARTBEAT);
     });
 
-    it('should return undefined for invalid names', () => {
-      expect(getSignalCode('INVALID_SIGNAL')).toBeUndefined();
+    it('should return null for invalid names', () => {
+      expect(getSignalCode('INVALID_SIGNAL')).toBeNull();
     });
   });
 
   describe('createSignal', () => {
     it('should create a signal with timestamp', () => {
-      const before = Date.now();
-      const signal = createSignal(0xF0, 'experience-layer', { test: true });
-      const after = Date.now();
+      const before = Math.floor(Date.now() / 1000);
+      const signal = createSignal(SignalTypes.EXPERIENCE_RECORDED, 'experience-layer', { test: true });
+      const after = Math.floor(Date.now() / 1000);
 
-      expect(signal.code).toBe(0xF0);
-      expect(signal.name).toBe('EXPERIENCE_RECORDED');
-      expect(signal.sender).toBe('experience-layer');
+      expect(signal.signalType).toBe(SignalTypes.EXPERIENCE_RECORDED);
+      expect(signal.version).toBe(0x0100);
+      expect(signal.payload.sender).toBe('experience-layer');
       expect(signal.timestamp).toBeGreaterThanOrEqual(before);
       expect(signal.timestamp).toBeLessThanOrEqual(after);
-      expect(signal.data).toEqual({ test: true });
+      expect(signal.payload.test).toBe(true);
+    });
+
+    it('should create signal without data', () => {
+      const signal = createSignal(SignalTypes.HEARTBEAT, 'test-server');
+
+      expect(signal.signalType).toBe(SignalTypes.HEARTBEAT);
+      expect(signal.payload.sender).toBe('test-server');
+    });
+  });
+
+  describe('encode function', () => {
+    it('should encode signal type, sender and data', () => {
+      const encoded = encode(SignalTypes.BUILD_COMPLETED, 'neurogenesis', { success: true });
+      expect(encoded).toBeInstanceOf(Buffer);
+      expect(encoded.length).toBeGreaterThan(12);
+
+      // Verify header
+      expect(encoded.readUInt16BE(0)).toBe(SignalTypes.BUILD_COMPLETED);
+      expect(encoded.readUInt16BE(2)).toBe(0x0100); // Protocol version
     });
   });
 });
@@ -161,27 +221,36 @@ describe('InterLock Tumbler', () => {
 
   describe('Whitelist Filtering', () => {
     it('should allow whitelisted signals', () => {
-      addToWhitelist('TEST_SIGNAL');
+      // Whitelist uses signal names, not signal types
+      // Signal type 0x99 maps to 'UNKNOWN_0x99' via getSignalName()
+      addToWhitelist('UNKNOWN_0x99');
 
       const signal: Signal = {
-        code: 0x99,
-        name: 'TEST_SIGNAL',
-        sender: 'test',
-        timestamp: Date.now()
+        signalType: 0x99,
+        version: 0x0100,
+        timestamp: Math.floor(Date.now() / 1000),
+        payload: {
+          sender: 'test'
+        }
       };
 
       expect(isSignalAllowed(signal)).toBe(true);
 
-      removeFromWhitelist('TEST_SIGNAL');
+      removeFromWhitelist('UNKNOWN_0x99');
     });
 
     it('should block non-whitelisted signals', () => {
       const signal: Signal = {
-        code: 0x99,
-        name: 'BLOCKED_SIGNAL',
-        sender: 'test',
-        timestamp: Date.now()
+        signalType: 0x99,
+        version: 0x0100,
+        timestamp: Math.floor(Date.now() / 1000),
+        payload: {
+          sender: 'test'
+        }
       };
+
+      // Remove if exists to ensure clean test
+      removeFromWhitelist('BLOCKED_SIGNAL');
 
       expect(isSignalAllowed(signal)).toBe(false);
     });
@@ -245,7 +314,7 @@ describe('InterLock Handlers', () => {
 
       expect(called).toBe(true);
       expect(receivedSignal).not.toBeNull();
-      expect(receivedSignal!.sender).toBe('test');
+      expect(receivedSignal!.payload.sender).toBe('test');
     });
 
     it('should override existing handler', () => {

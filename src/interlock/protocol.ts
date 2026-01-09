@@ -27,6 +27,14 @@ export function getSignalName(signalType: number): string {
 }
 
 /**
+ * Get signal code from name (reverse of getSignalName)
+ */
+export function getSignalCode(signalName: string): number | null {
+  const entry = Object.entries(SignalTypes).find(([name]) => name === signalName);
+  return entry ? (entry[1] as number) : null;
+}
+
+/**
  * Encode a signal to BaNano binary format
  */
 export function encode(signalType: number, sender: string, data?: Record<string, unknown>): Buffer {
